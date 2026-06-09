@@ -1,4 +1,4 @@
-# vek-sync
+# vek-sync - v0.3.0
 
 > One config file. Every editor. Always in sync.
 
