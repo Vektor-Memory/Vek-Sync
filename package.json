@@ -1,6 +1,6 @@
 {
   "name": "@vektormemory/vek-sync",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Portable MCP server config sync across Claude Desktop, Cursor, VS Code, Windsurf and more.",
   "type": "module",
   "bin": {
@@ -48,7 +48,10 @@
   "engines": {
     "node": ">=18.0.0"
   },
-  "dependencies": {},
-  "devDependencies": {},
-  "peerDependencies": {}
+  "dependencies": {
+    "ink": "^7.0.6",
+    "ink-select-input": "^6.2.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^19.2.7"
+  }
 }

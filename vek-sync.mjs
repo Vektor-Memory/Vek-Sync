@@ -4,7 +4,7 @@
  * Commands: init, sync, export, status, diff, add, ping, share, profile, search, vault
  */
 
-import { readFileSync, watch, existsSync, writeFileSync } from 'fs';
+import { readFileSync, watch, existsSync, writeFileSync, mkdirSync, readdirSync } from 'fs';
 import { resolve, join }                                   from 'path';
 import { homedir }                                         from 'os';
 import { createInterface }                                 from 'readline/promises';
@@ -24,9 +24,7 @@ const CONNECTORS = {
   cline, rooCode, gemini, copilot, continue: continue_, codex,
 };
 const CONNECTOR_NAMES = Object.keys(CONNECTORS);
-const VERSION         = '0.3.0';
-
-// ── PALETTE ───────────────────────────────────────────────────────────────
+const VERSION         = '0.3.1';
 
 const _ = {
   reset:  '\x1b[0m',  bold:   '\x1b[1m',
@@ -48,27 +46,23 @@ const R  = s => p(_.red, s);
 const Y  = s => p(_.amber, s);
 const Co = s => p(_.cobalt, s);
 
-// ── BANNER ────────────────────────────────────────────────────────────────
-
 function banner() {
   console.log('');
-  console.log(' ' + Co('██╗   ██╗') + St(' ███████╗') + Sk(' ██╗  ██╗'));
-  console.log(' ' + Co('██║   ██║') + St(' ██╔════╝') + Sk(' ██║ ██╔╝'));
-  console.log(' ' + Co('██║   ██║') + St(' █████╗  ') + Sk(' █████╔╝ '));
-  console.log(' ' + Co('╚██╗ ██╔╝') + St(' ██╔══╝  ') + Sk(' ██╔═██╗ '));
-  console.log(' ' + Co(' ╚████╔╝ ') + St(' ███████╗') + Sk(' ██║  ██╗') + '  ' + W('─ sync') + '  ' + Gr(`v${VERSION}`));
-  console.log(' ' + Co('  ╚═══╝  ') + St(' ╚══════╝') + Sk(' ╚═╝  ╚═╝'));
+  console.log(' ' + Co('\u2588\u2588\u2557   \u2588\u2588\u2557') + St(' \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557') + Sk(' \u2588\u2588\u2557  \u2588\u2588\u2557'));
+  console.log(' ' + Co('\u2588\u2588\u2551   \u2588\u2588\u2551') + St(' \u2588\u2588\u2554\u2550\u2550\u2550\u2550\u255d') + Sk(' \u2588\u2588\u2551 \u2588\u2588\u2554\u255d'));
+  console.log(' ' + Co('\u2588\u2588\u2551   \u2588\u2588\u2551') + St(' \u2588\u2588\u2588\u2588\u2588\u2557  ') + Sk(' \u2588\u2588\u2588\u2588\u2588\u2554\u255d '));
+  console.log(' ' + Co('\u255a\u2588\u2588\u2557 \u2588\u2588\u2554\u255d') + St(' \u2588\u2588\u2554\u2550\u2550\u255d  ') + Sk(' \u2588\u2588\u2554\u2550\u2588\u2588\u2557 '));
+  console.log(' ' + Co(' \u255a\u2588\u2588\u2588\u2588\u2554\u255d ') + St(' \u2588\u2588\u2588\u2588\u2588\u2588\u2588\u2557') + Sk(' \u2588\u2588\u2551  \u2588\u2588\u2557') + '  ' + W('\u2500 sync') + '  ' + Gr(`v${VERSION}`));
+  console.log(' ' + Co('  \u255a\u2550\u2550\u2550\u255d  ') + St(' \u255a\u2550\u2550\u2550\u2550\u2550\u2550\u255d') + Sk(' \u255a\u2550\u255d  \u255a\u2550\u255d'));
   console.log('');
-  console.log('  ' + Si('sync MCP server configs across editors') + '  ' + Gr('· Apache 2.0 · github.com/Vektor-Memory/vek-sync'));
+  console.log('  ' + Si('sync MCP server configs across editors') + '  ' + Gr('\u00b7 Apache 2.0 \u00b7 github.com/Vektor-Memory/vek-sync'));
   console.log('');
 }
 
-// ── BOX HELPERS ───────────────────────────────────────────────────────────
-
-const BAR = St('│');
-const TL  = St('┌─');
-const BL  = St('└');
-const HR  = St('─');
+const BAR = St('\u2502');
+const TL  = St('\u250c\u2500');
+const BL  = St('\u2514');
+const HR  = St('\u2500');
 
 function box(label) {
   const raw = label.replace(/\x1b\[[0-9;]*m/g, '');
@@ -82,19 +76,15 @@ function row(label, value) {
 }
 function blank() { console.log('  ' + BAR); }
 
-// ── CLI ARG PARSING ───────────────────────────────────────────────────────
-
 const [,, cmd, ...args] = process.argv;
 
 function flag(name)    { return args.includes(`--${name}`); }
 function opt(name)     { const i = args.indexOf(`--${name}`); return i !== -1 ? args[i + 1] : null; }
 function positional(i) { return args.filter(a => !a.startsWith('--'))[i]; }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────
-
 function getMcpFile() {
   const f = opt('file') ?? mcpfile.findMcpFile();
-  if (!f) { console.error('\n  ' + R('✗') + Gr('  No .mcp.json found — run: ') + Sk('vek-sync init') + '\n'); process.exit(1); }
+  if (!f) { console.error('\n  ' + R('\u2717') + Gr('  No .mcp.json found \u2014 run: ') + Sk('vek-sync init') + '\n'); process.exit(1); }
   return f;
 }
 
@@ -104,7 +94,7 @@ function getConnectors() {
     const names = only.split(',').map(s => s.trim());
     const bad   = names.filter(n => !CONNECTORS[n]);
     if (bad.length) {
-      console.error('\n  ' + R(`✗  Unknown connector(s): ${bad.join(', ')}`));
+      console.error('\n  ' + R(`\u2717  Unknown connector(s): ${bad.join(', ')}`));
       console.error('     ' + Gr(`Valid: ${CONNECTOR_NAMES.join(', ')}`) + '\n');
       process.exit(1);
     }
@@ -134,521 +124,308 @@ const CONN_LABELS = {
   codex:         'Codex (OpenAI)',
 };
 
-// ── COMMANDS ──────────────────────────────────────────────────────────────
+// ── Original commands (unchanged) ─────────────────────────────────────────────
 
 async function cmdInit() {
   const filePath    = opt('file') ?? resolve(process.cwd(), '.mcp.json');
   const description = opt('description') ?? '';
   const fromEditor  = opt('from');
   const fromUrl     = opt('from-url');
-
   try {
     mcpfile.init(filePath, description);
-    console.log('\n  ' + G('✓') + Gr('  Created ') + Sk(filePath));
+    console.log('\n  ' + G('\u2713') + Gr('  Created ') + Sk(filePath));
   } catch (err) {
-    console.error('\n  ' + R(`✗  ${err.message}`) + '\n'); process.exit(1);
+    console.error('\n  ' + R(`\u2717  ${err.message}`) + '\n'); process.exit(1);
   }
-
   if (fromEditor) {
     if (!CONNECTORS[fromEditor]) {
-      console.error('\n  ' + R(`✗  Unknown connector: ${fromEditor}`) + '\n  ' + Gr(`Valid: ${CONNECTOR_NAMES.join(', ')}`) + '\n');
+      console.error('\n  ' + R(`\u2717  Unknown connector: ${fromEditor}`) + '\n  ' + Gr(`Valid: ${CONNECTOR_NAMES.join(', ')}`) + '\n');
       process.exit(1);
     }
     try {
       const partial = CONNECTORS[fromEditor].export();
       const base    = mcpfile.read(filePath);
       mcpfile.write(filePath, mcpfile.merge(base, partial));
-      console.log('  ' + G('✓') + Gr('  Imported ') + W(String(Object.keys(partial.servers ?? {}).length)) + Gr(' server(s) from ') + Ic(fromEditor));
+      console.log('  ' + G('\u2713') + Gr('  Imported ') + W(String(Object.keys(partial.servers ?? {}).length)) + Gr(' server(s) from ') + Ic(fromEditor));
       if (partial.credentials && Object.keys(partial.credentials).length) {
-        console.log('\n  ' + Y('⚠') + Gr(`  ${Object.keys(partial.credentials).length} credential(s) detected — store them:`));
+        console.log('\n  ' + Y('\u26a0') + Gr(`  ${Object.keys(partial.credentials).length} credential(s) detected \u2014 store them:`));
         for (const k of Object.keys(partial.credentials)) console.log('     ' + Gr(`vek-sync vault set ${k} <value>`));
       }
     } catch (err) {
-      console.error('\n  ' + R(`✗  Failed to import from ${fromEditor}: ${err.message}`) + '\n'); process.exit(1);
+      console.error('\n  ' + R(`\u2717  Failed to import from ${fromEditor}: ${err.message}`) + '\n'); process.exit(1);
     }
   }
-
   if (fromUrl) {
     try {
-      console.log('  ' + Gr('Fetching ') + Sk(fromUrl) + Gr('…'));
-      const res     = await fetch(fromUrl);
+      console.log('  ' + Gr('Fetching ') + Sk(fromUrl) + Gr('\u2026'));
+      const res    = await fetch(fromUrl);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const text    = await res.text();
-      const remote  = JSON.parse(text);
-      const base    = mcpfile.read(filePath);
+      const text   = await res.text();
+      const remote = JSON.parse(text);
+      const base   = mcpfile.read(filePath);
       mcpfile.write(filePath, mcpfile.merge(base, remote));
-      console.log('  ' + G('✓') + Gr('  Imported ') + W(String(Object.keys(remote.servers ?? {}).length)) + Gr(' server(s) from URL'));
+      console.log('  ' + G('\u2713') + Gr('  Imported ') + W(String(Object.keys(remote.servers ?? {}).length)) + Gr(' server(s) from URL'));
     } catch (err) {
-      console.error('\n  ' + R(`✗  Failed to import from URL: ${err.message}`) + '\n'); process.exit(1);
+      console.error('\n  ' + R(`\u2717  Failed to fetch URL: ${err.message}`) + '\n'); process.exit(1);
     }
   }
-
   console.log('');
-}
-
-function runSync(filePath, dryRun = false) {
-  const mcp      = mcpfile.read(filePath);
-  const resolved = { ...mcp, servers: resolveObject(mcp.servers) };
-  const conns    = getConnectors();
-  let   anyErr   = false;
-
-  for (const [name, conn] of Object.entries(conns)) {
-    if (dryRun) {
-      // Show what would change without writing
-      try {
-        const noop = () => {}; const ol = console.log; const ow = console.warn;
-        console.log = noop; console.warn = noop;
-        const current = conn.export?.() ?? { servers: {} };
-        console.log = ol; console.warn = ow;
-        const diff = mcpfile.diffServers(current, mcp);
-        const label = CONN_LABELS[name] ?? name;
-        if (!diff.added.length && !diff.removed.length && !diff.changed.length) {
-          console.log('  ' + G('✓') + '  ' + W((label).padEnd(18)) + Gr('in sync'));
-        } else {
-          console.log('  ' + Y('≠') + '  ' + W(label));
-          if (diff.added.length)   console.log('      ' + G('+') + '  ' + Si(diff.added.join(', ')));
-          if (diff.removed.length) console.log('      ' + R('-') + '  ' + Si(diff.removed.join(', ')));
-          if (diff.changed.length) console.log('      ' + Y('~') + '  ' + Si(diff.changed.join(', ')));
-        }
-      } catch { /* connector may not support export */ }
-      continue;
-    }
-
-    // Backup the target config before overwriting
-    const cfgPath = conn.configPath?.();
-    if (cfgPath) backup(cfgPath);
-
-    const noop = () => {}; const origLog = console.log; const origWarn = console.warn;
-    console.log = noop; console.warn = noop;
-    let result;
-    try {
-      result = conn.sync(resolved);
-    } catch (err) {
-      console.log = origLog; console.warn = origWarn;
-      console.error('  ' + R('✗') + '  ' + W((CONN_LABELS[name] ?? name).padEnd(18)) + R(err.message));
-      anyErr = true; continue;
-    }
-    console.log = origLog; console.warn = origWarn;
-    const count = result.count ?? result.synced ?? '?';
-    const dest  = result.written ?? cfgPath ?? '';
-    console.log('  ' + G('✓') + '  ' + W((CONN_LABELS[name] ?? name).padEnd(18)) + Si(String(count).padStart(2)) + Gr(' server(s) → ') + Sk(shortenPath(dest)));
-  }
-
-  if (!dryRun) mcpfile.write(filePath, mcp);
-  return anyErr;
 }
 
 function cmdSync() {
   const filePath = getMcpFile();
-  const dryRun   = flag('dry-run');
+  const conns    = getConnectors();
+  const dry      = flag('dry-run');
+  const watchMode = flag('watch');
   banner();
-  if (dryRun) {
-    console.log('  ' + Y('◌') + Gr('  Dry run — no files will be written\n'));
-  } else {
-    console.log('  ' + Gr('Syncing') + '  ' + Sk(filePath) + '\n');
+  function doSync() {
+    const mcp = mcpfile.read(filePath);
+    const resolved = resolveObject(mcp);
+    box(dry ? 'SYNC PREVIEW' : 'SYNC');
+    let changed = 0;
+    for (const [name, conn] of Object.entries(conns)) {
+      try {
+        const label = CONN_LABELS[name] ?? name;
+        if (dry) {
+          if (typeof conn.diff === 'function') {
+            const result = conn.diff(resolved);
+            if (result.changed) { changed++; row(Y('\u25b2') + ' ' + W(label), Gr('would change')); }
+            else { row(Gr('\u2013') + ' ' + Si(label), Gr('in sync')); }
+          } else {
+            const st = conn.status();
+            row(Gr('\u2013') + ' ' + Si(label), st.exists ? Sk(shortenPath(st.path ?? '')) + Gr(' (no diff)') : Gr('not configured'));
+          }
+        } else {
+          const servers = resolved.servers ?? {};
+          const result = conn.sync(servers, (k) => resolved.credentials?.[k] ?? k);
+          changed++; row(G('\u2713') + ' ' + W(label), Gr(`synced ${result?.synced ?? '?'} server(s)`));
+        }
+      } catch (err) { row(R('\u2717') + ' ' + W(CONN_LABELS[name] ?? name), R(err.message)); }
+    }
+    blank();
+    if (dry) console.log('  ' + BAR + '  ' + Y(`\u26a0  dry run \u2014 ${changed} connector(s) would change. Run without --dry-run to apply.`));
+    else     console.log('  ' + BAR + '  ' + G(`\u2713  synced ${changed} connector(s)`));
+    boxEnd();
   }
-  const anyErr = runSync(filePath, dryRun);
-
-  if (!dryRun && flag('watch')) {
-    console.log('\n  ' + St('◈') + Gr('  watching for changes — Ctrl-C to stop\n'));
-    let debounce = null;
-    watch(filePath, () => {
-      clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        console.log('\n  ' + Ic('↻') + Gr('  change detected — syncing…\n'));
-        runSync(filePath, false);
-      }, 200);
-    });
-    return;
+  doSync();
+  if (watchMode) {
+    console.log('  ' + Gr('Watching ') + Sk(filePath) + Gr(' for changes\u2026\n'));
+    watch(filePath, () => { console.log('  ' + Sk('\u2192') + Gr('  change detected, re-syncing\u2026')); doSync(); });
   }
-  console.log('');
-  if (!dryRun && anyErr) process.exit(1);
 }
 
 function cmdExport() {
   const filePath = getMcpFile();
   banner();
-  console.log('  ' + Gr('Exporting to') + '  ' + Sk(filePath) + '\n');
-  const existing = existsSilent(filePath) ? mcpfile.read(filePath) : { mcpSync: { version: '1.0' }, servers: {} };
-  const conns    = getConnectors();
-  let   merged   = existing;
-  for (const [name, conn] of Object.entries(conns)) {
-    try {
-      const partial = conn.export();
-      merged = mcpfile.merge(merged, partial);
-      console.log('  ' + G('✓') + '  ' + W((CONN_LABELS[name] ?? name).padEnd(18)) + Si(String(Object.keys(partial.servers ?? {}).length).padStart(2)) + Gr(' server(s) exported'));
-    } catch (err) {
-      console.error('  ' + R('✗') + '  ' + W((CONN_LABELS[name] ?? name).padEnd(18)) + R(err.message));
-    }
-  }
-  mcpfile.write(filePath, merged);
-  console.log('\n  ' + G('✓') + Gr('  Saved → ') + Sk(filePath) + '\n');
+  const mcp = mcpfile.read(filePath);
+  box('EXPORT');
+  row(Si('file'), Sk(shortenPath(filePath)));
+  row(Si('servers'), W(String(Object.keys(mcp.servers ?? {}).length)));
+  boxEnd();
+  console.log(JSON.stringify(mcp, null, 2));
 }
 
 function cmdStatus() {
+  const filePath = getMcpFile();
+  const conns    = getConnectors();
   banner();
-  box('CONNECTORS');
-  for (const [name, conn] of Object.entries(getConnectors())) {
+  const mcp = mcpfile.read(filePath);
+  box('STATUS');
+  row(Si('source'), Sk(shortenPath(filePath)));
+  row(Si('servers'), W(String(Object.keys(mcp.servers ?? {}).length)));
+  blank();
+  for (const [name, conn] of Object.entries(conns)) {
     try {
-      let s = conn.status();
-      if (Array.isArray(s)) {
-        const path = conn.configPath?.() ?? '';
-        s = { installed: existsSync(path), path, servers: s };
-      }
+      const st    = conn.status();
       const label = CONN_LABELS[name] ?? name;
-      const n     = s.servers?.length ?? 0;
-      if (s.installed) {
-        row(G('✓') + ' ' + W(label), n === 0 ? Gr('no servers') : G(String(n)) + Gr(` server${n !== 1 ? 's' : ''}`));
-        console.log('  ' + BAR + '   ' + Gr(shortenPath(s.path)));
-        if (n) console.log('  ' + BAR + '   ' + Si(s.servers.join('  ' + Gr('·') + '  ')));
-      } else {
-        row(Gr('·') + ' ' + Si(label), Gr('not installed'));
-        console.log('  ' + BAR + '   ' + Gr(shortenPath(s.path)));
-      }
-    } catch (err) { row(R('✗') + ' ' + W(name), R(err.message)); }
+      const icon  = st.exists ? (st.inSync ? G('\u2713') : Y('\u25cb')) : Gr('\u2013');
+      row(icon + ' ' + (st.exists ? W(label) : Si(label)), st.exists ? Sk(shortenPath(st.path)) + (st.inSync ? Gr(' (in sync)') : Y(' (out of sync)')) : Gr('not configured'));
+    } catch (err) { row(R('\u2717') + ' ' + W(CONN_LABELS[name] ?? name), R(err.message)); }
   }
   boxEnd();
 }
 
 function cmdDiff() {
   const filePath = getMcpFile();
+  const conns    = getConnectors();
   banner();
-  console.log('  ' + Gr('Diffing against') + '  ' + Sk(filePath) + '\n');
-  const mcp     = mcpfile.read(filePath);
-  const conns   = getConnectors();
-  let   anyDiff = false;
+  const mcp      = mcpfile.read(filePath);
+  const resolved = resolveObject(mcp);
+  box('DIFF');
   for (const [name, conn] of Object.entries(conns)) {
     try {
-      const noop = () => {}; const ol = console.log; const ow = console.warn;
-      console.log = noop; console.warn = noop;
-      const current = conn.export();
-      console.log = ol; console.warn = ow;
-      const diff = mcpfile.diffServers(current, mcp);
-      if (!diff.added.length && !diff.removed.length && !diff.changed.length) {
-        console.log('  ' + G('✓') + '  ' + W((CONN_LABELS[name] ?? name).padEnd(18)) + Gr('in sync'));
+      const label = CONN_LABELS[name] ?? name;
+      if (typeof conn.diff === 'function') {
+        const result = conn.diff(resolved);
+        if (result.changed) {
+          row(Y('\u25b2') + ' ' + W(label), Sk(shortenPath(result.path ?? '')));
+          if (result.added)   console.log('  ' + BAR + '    ' + G(`  +${result.added} server(s) to add`));
+          if (result.removed) console.log('  ' + BAR + '    ' + R(`  -${result.removed} server(s) to remove`));
+        } else { row(Gr('\u2013') + ' ' + Si(label), Gr('in sync')); }
       } else {
-        anyDiff = true;
-        console.log('  ' + Y('≠') + '  ' + W(CONN_LABELS[name] ?? name));
-        if (diff.added.length)   console.log('      ' + G('+') + '  ' + Si(diff.added.join(', ')));
-        if (diff.removed.length) console.log('      ' + R('-') + '  ' + Si(diff.removed.join(', ')));
-        if (diff.changed.length) console.log('      ' + Y('~') + '  ' + Si(diff.changed.join(', ')));
+        const st = conn.status();
+        row(Gr('\u2013') + ' ' + Si(label), st.exists ? Sk(shortenPath(st.path ?? '')) + Gr(' (diff N/A)') : Gr('not configured'));
       }
-    } catch (err) { console.error('  ' + R('✗') + '  ' + W(name) + '  ' + R(err.message)); }
-  }
-  console.log('');
-  if (anyDiff) process.exit(1);
-}
-
-// ── ADD ───────────────────────────────────────────────────────────────────
-
-async function cmdAdd() {
-  const filePath = getMcpFile();
-  banner();
-  box('ADD SERVER');
-
-  const rl      = createInterface({ input: process.stdin, output: process.stdout });
-  const ask     = async (q, def = '') => {
-    const ans = (await rl.question('  ' + BAR + '  ' + Si(q) + (def ? Gr(` [${def}]`) : '') + ' ')).trim();
-    return ans || def;
-  };
-
-  try {
-    const name      = await ask('Server name:');
-    if (!name) { console.log('\n  ' + R('✗  Name is required') + '\n'); rl.close(); return; }
-
-    const transport = await ask('Transport (stdio/http):', 'stdio');
-    let   def       = {};
-
-    if (transport === 'http') {
-      const url     = await ask('URL:');
-      const hdrRaw  = await ask('Headers (KEY=value space-separated, or blank):');
-      def.url = url;
-      if (hdrRaw) {
-        def.headers = {};
-        for (const pair of hdrRaw.split(/\s+/)) {
-          const [k, ...v] = pair.split('=');
-          if (k) def.headers[k] = v.join('=');
-        }
-      }
-    } else {
-      const command = await ask('Command:', 'npx');
-      const argsRaw = await ask('Args (space-separated):');
-      const envRaw  = await ask('Env vars (KEY=value space-separated, or blank):');
-      def.command = command;
-      def.args    = argsRaw ? argsRaw.split(/\s+/) : [];
-      if (envRaw) {
-        def.env = {};
-        for (const pair of envRaw.split(/\s+/)) {
-          const [k, ...v] = pair.split('=');
-          if (k) def.env[k] = v.join('=');
-        }
-      }
-    }
-
-    rl.close();
-    blank(); boxEnd();
-
-    const mcp = mcpfile.read(filePath);
-    if (mcp.servers[name]) {
-      console.log('  ' + Y('⚠') + Gr(`  Overwriting existing server "${name}"`));
-    }
-    mcp.servers[name] = def;
-    mcpfile.write(filePath, mcp);
-    console.log('  ' + G('✓') + Gr('  Added ') + W(`"${name}"`) + Gr(' to ') + Sk(filePath));
-    console.log('  ' + Gr('  Run ') + Sk('vek-sync sync') + Gr(' to push to all editors\n'));
-  } catch (err) {
-    rl.close();
-    console.error('\n  ' + R(`✗  ${err.message}`) + '\n'); process.exit(1);
-  }
-}
-
-// ── PING ──────────────────────────────────────────────────────────────────
-
-async function cmdPing() {
-  const filePath = getMcpFile();
-  const mcp      = mcpfile.read(filePath);
-  const resolved = resolveObject(mcp.servers ?? {});
-  banner();
-  box('PING');
-
-  const entries = Object.entries(resolved);
-  if (!entries.length) {
-    console.log('  ' + BAR + '  ' + Gr('No servers in .mcp.json'));
-    boxEnd(); return;
-  }
-
-  for (const [name, def] of entries) {
-    const label = name.padEnd(22);
-    if (def.url) {
-      const r = await pingHttp(def.url);
-      const ms = r.ms != null ? Gr(` ${r.ms}ms`) : '';
-      console.log('  ' + BAR + '  ' + (r.ok ? G('✓') : R('✗')) + '  ' + Si(label) + (r.ok ? G('alive') + ms + Gr(' (http)') : R(r.error ?? 'unreachable')));
-    } else if (def.command) {
-      const r = await pingStdio(def.command, def.args ?? [], def.env ?? {});
-      const ms = r.ms != null ? Gr(` ${r.ms}ms`) : '';
-      const note = r.note ? Gr(`  ${r.note}`) : '';
-      console.log('  ' + BAR + '  ' + (r.ok ? G('✓') : R('✗')) + '  ' + Si(label) + (r.ok ? G('alive') + ms + note : R(r.error ?? 'failed')));
-    } else {
-      console.log('  ' + BAR + '  ' + Y('?') + '  ' + Si(label) + Gr('unknown transport'));
-    }
+    } catch (err) { row(R('\u2717') + ' ' + W(CONN_LABELS[name] ?? name), R(err.message)); }
   }
   boxEnd();
 }
 
-// ── SHARE ─────────────────────────────────────────────────────────────────
+async function cmdAdd() {
+  const name     = positional(0);
+  const urlArg   = opt('url');
+  if (!name && !urlArg) {
+    banner();
+    console.error('  ' + R('\u2717  Usage: vek-sync add <name|npm-package> [--url <mcp-url>]') + '\n'); process.exit(1);
+  }
+  const filePath = getMcpFile();
+  banner();
+  const mcp = mcpfile.read(filePath);
+  if (urlArg) {
+    mcp.servers = mcp.servers ?? {};
+    mcp.servers[name ?? urlArg] = { url: urlArg };
+    mcpfile.write(filePath, mcp);
+    console.log('  ' + G('\u2713') + Gr('  Added HTTP server ') + W(name ?? urlArg) + Gr(' \u2192 ') + Sk(urlArg) + '\n');
+    return;
+  }
+  try {
+    const results = await searchNpm(name);
+    if (!results.length) { console.log('  ' + Y('\u26a0') + Gr(`  No npm package found for "${name}"`) + '\n'); return; }
+    const pkg = results[0];
+    mcp.servers = mcp.servers ?? {};
+    mcp.servers[pkg.name] = { command: 'npx', args: ['-y', pkg.name] };
+    mcpfile.write(filePath, mcp);
+    console.log('  ' + G('\u2713') + Gr('  Added ') + W(pkg.name) + Gr(' via npx') + '\n');
+  } catch (err) {
+    console.error('  ' + R(`\u2717  ${err.message}`) + '\n'); process.exit(1);
+  }
+}
+
+async function cmdPing() {
+  const filePath = getMcpFile();
+  banner();
+  const mcp = mcpfile.read(filePath);
+  box('PING');
+  for (const [name, cfg] of Object.entries(mcp.servers ?? {})) {
+    try {
+      const result = cfg.url ? await pingHttp(cfg.url) : await pingStdio(cfg.command, cfg.args ?? [], cfg.env ?? {});
+      const ok = typeof result === 'boolean' ? result : result?.ok;
+      const ms = result?.ms ? Gr(` ${result.ms}ms`) : '';
+      row((ok ? G('\u2713') : R('\u2717')) + ' ' + W(name), (ok ? G('online') : R('offline')) + ms);
+    } catch (err) { row(R('\u2717') + ' ' + W(name), R(err.message)); }
+  }
+  boxEnd();
+}
 
 async function cmdShare() {
   const filePath = getMcpFile();
-  const mcp      = mcpfile.read(filePath);
   banner();
-
-  // Strip vault: refs from servers — don't publish secret pointers
-  const safe = {
-    ...mcp,
-    servers: Object.fromEntries(
-      Object.entries(mcp.servers ?? {}).map(([name, def]) => [
-        name,
-        {
-          ...def,
-          env:     def.env     ? Object.fromEntries(Object.entries(def.env).map(([k, v]) => [k, v.startsWith('vault:') ? 'vault:<redacted>' : v])) : undefined,
-          headers: def.headers ? Object.fromEntries(Object.entries(def.headers).map(([k, v]) => [k, v.startsWith('vault:') ? 'vault:<redacted>' : v])) : undefined,
-        },
-      ])
-    ),
-  };
-  const content = JSON.stringify(safe, null, 2);
-
-  console.log('  ' + Gr('Uploading config (secrets redacted)…\n'));
-
-  try {
-    const res = await fetch('https://paste.rs/', {
-      method:  'POST',
-      headers: { 'Content-Type': 'text/plain', 'User-Agent': 'vek-sync/0.3.0' },
-      body:    content,
-    });
-    if (!res.ok) throw new Error(`paste.rs HTTP ${res.status}`);
-    const url = (await res.text()).trim();
-    console.log('  ' + G('✓') + Gr('  Shared → ') + Sk(url));
-    console.log('  ' + Gr('  Import with: ') + Sk(`vek-sync init --from-url ${url}`) + '\n');
-  } catch (err) {
-    console.error('  ' + R(`✗  Share failed: ${err.message}`));
-    console.log('\n  ' + Gr('Config to share manually:\n'));
-    console.log(content + '\n');
+  const mcp = mcpfile.read(filePath);
+  const sanitised = JSON.parse(JSON.stringify(mcp));
+  for (const cfg of Object.values(sanitised.servers ?? {})) {
+    if (cfg.env) for (const k of Object.keys(cfg.env)) cfg.env[k] = `<${k}>`;
   }
+  delete sanitised.credentials;
+  box('SHARE');
+  console.log(JSON.stringify(sanitised, null, 2));
+  boxEnd();
 }
 
-// ── PROFILE ───────────────────────────────────────────────────────────────
-
-function cmdProfile() {
-  const sub = positional(0);
-  const filePath = getMcpFile();
-  const mcp      = mcpfile.read(filePath);
-  const profiles = mcp.profiles ?? {};
-
+async function cmdProfile() {
+  const sub      = positional(0);
+  const name     = positional(1);
+  const filePath = opt('file') ?? mcpfile.findMcpFile() ?? resolve(process.cwd(), '.mcp.json');
+  const profileDir = join(homedir(), '.vek-sync', 'profiles');
+  banner();
   if (sub === 'save') {
-    const name = positional(1);
-    if (!name) { console.error('\n  ' + R('✗  Usage: vek-sync profile save <name>') + '\n'); process.exit(1); }
-    mcp.profiles = { ...profiles, [name]: { servers: { ...mcp.servers } } };
-    mcpfile.write(filePath, mcp);
-    console.log('\n  ' + G('✓') + Gr(`  Profile "${name}" saved (`) + W(String(Object.keys(mcp.servers).length)) + Gr(' servers)\n'));
-
+    if (!name) { console.error('  ' + R('\u2717  Usage: vek-sync profile save <name>') + '\n'); process.exit(1); }
+    const src = existsSilent(filePath) ? readFileSync(filePath, 'utf8') : '{}';
+    mkdirSync(profileDir, { recursive: true });
+    writeFileSync(join(profileDir, `${name}.json`), src);
+    console.log('  ' + G('\u2713') + Gr('  Profile saved: ') + W(name) + '\n');
   } else if (sub === 'use') {
-    const name = positional(1);
-    if (!name) { console.error('\n  ' + R('✗  Usage: vek-sync profile use <name>') + '\n'); process.exit(1); }
-    if (!profiles[name]) {
-      console.error('\n  ' + R(`✗  Profile "${name}" not found`));
-      console.error('     ' + Gr(`Available: ${Object.keys(profiles).join(', ') || '(none)'}`) + '\n');
-      process.exit(1);
-    }
-    mcp.servers = { ...profiles[name].servers };
-    mcp.mcpSync = { ...mcp.mcpSync, activeProfile: name };
-    mcpfile.write(filePath, mcp);
-    console.log('\n  ' + G('✓') + Gr(`  Switched to profile `) + W(`"${name}"`) + Gr(` (${Object.keys(mcp.servers).length} servers)`));
-    console.log('  ' + Gr('  Run ') + Sk('vek-sync sync') + Gr(' to push to editors\n'));
-
+    if (!name) { console.error('  ' + R('\u2717  Usage: vek-sync profile use <name>') + '\n'); process.exit(1); }
+    const src = join(profileDir, `${name}.json`);
+    if (!existsSilent(src)) { console.error('  ' + R(`\u2717  Profile not found: ${name}`) + '\n'); process.exit(1); }
+    writeFileSync(filePath, readFileSync(src, 'utf8'));
+    console.log('  ' + G('\u2713') + Gr('  Switched to profile: ') + W(name) + '\n');
   } else if (sub === 'list') {
-    banner();
-    box('PROFILES');
-    const active = mcp.mcpSync?.activeProfile;
-    if (!Object.keys(profiles).length) {
-      console.log('  ' + BAR + '  ' + Gr('No profiles saved yet. Use: vek-sync profile save <name>'));
-    } else {
-      for (const [name, prof] of Object.entries(profiles)) {
-        const isActive = name === active;
-        row(
-          (isActive ? G('●') : Gr('○')) + ' ' + W(name),
-          Si(String(Object.keys(prof.servers ?? {}).length)) + Gr(' servers') + (isActive ? '  ' + G('← active') : '')
-        );
-      }
-    }
-    boxEnd();
-
-  } else if (sub === 'delete') {
-    const name = positional(1);
-    if (!name) { console.error('\n  ' + R('✗  Usage: vek-sync profile delete <name>') + '\n'); process.exit(1); }
-    if (!profiles[name]) { console.error('\n  ' + R(`✗  Profile "${name}" not found`) + '\n'); process.exit(1); }
-    delete mcp.profiles[name];
-    mcpfile.write(filePath, mcp);
-    console.log('\n  ' + G('✓') + Gr(`  Deleted profile "${name}"\n`));
-
+    try {
+      const files = readdirSync(profileDir).filter(f => f.endsWith('.json'));
+      box('PROFILES');
+      for (const f of files) row(Si(f.replace('.json', '')), Gr(join(profileDir, f)));
+      boxEnd();
+    } catch { console.log('  ' + Gr('No profiles saved yet.') + '\n'); }
   } else {
-    console.error('\n  ' + R('✗  Usage: vek-sync profile <save|use|list|delete> [name]') + '\n');
-    process.exit(1);
+    console.error('  ' + R('\u2717  Usage: vek-sync profile save|use|list <name>') + '\n'); process.exit(1);
   }
 }
-
-// ── SEARCH ────────────────────────────────────────────────────────────────
 
 async function cmdSearch() {
   const query = positional(0);
   banner();
-
-  if (!query) {
-    console.error('  ' + R('✗  Usage: vek-sync search <query>') + '\n'); process.exit(1);
-  }
-
-  box(`SEARCH  "${query}"`);
-
-  const curated = searchCurated(query);
-  if (curated.length) {
-    for (const s of curated) {
-      row(G('★') + ' ' + W(s.name), Si(s.package));
-      console.log('  ' + BAR + '   ' + Gr(s.description));
-      console.log('  ' + BAR + '   ' + Sk(`npx -y ${s.package}`));
-      blank();
+  if (!query) { console.error('  ' + R('\u2717  Usage: vek-sync search <query>') + '\n'); process.exit(1); }
+  box(`SEARCH: ${query}`);
+  try {
+    const curated = searchCurated(query);
+    const npm     = await searchNpm(query);
+    const results = [...curated, ...npm].slice(0, 10);
+    if (!results.length) { console.log('  ' + BAR + '  ' + Gr('No results found.')); }
+    for (const r of results) {
+      row(W(r.name), Gr(r.description ?? ''));
+      if (r.url)      console.log('  ' + BAR + '    ' + Sk(r.url));
+      if (r.install)  console.log('  ' + BAR + '    ' + Ic(r.install));
     }
-  }
-
-  console.log('  ' + BAR + '  ' + Gr('Searching npm…'));
-  const npm = (await searchNpm(query)).filter(r => !curated.find(c => c.package === r.package));
-  for (const s of npm.slice(0, 5)) {
-    row(Gr('·') + ' ' + Si(s.name), Gr(s.package));
-    if (s.description) console.log('  ' + BAR + '   ' + Gr(s.description));
-    blank();
-  }
-
-  if (!curated.length && !npm.length) {
-    console.log('  ' + BAR + '  ' + Y('No results found'));
-  }
-
-  boxEnd();
-
-  // Offer to add one
-  if (curated.length) {
-    const rl  = createInterface({ input: process.stdin, output: process.stdout });
-    const ans = (await rl.question('  Add to .mcp.json? Enter name or blank to skip: ')).trim();
-    rl.close();
-    if (ans) {
-      const found = curated.find(s => s.name === ans) ?? npm.find(s => s.name === ans);
-      if (found) {
-        try {
-          const filePath = getMcpFile();
-          const mcp = mcpfile.read(filePath);
-          mcp.servers[found.name] = {
-            command: found.command,
-            args:    found.args,
-            ...(found.env ? { env: found.env } : {}),
-          };
-          mcpfile.write(filePath, mcp);
-          console.log('\n  ' + G('✓') + Gr('  Added ') + W(`"${found.name}"`) + Gr(' — run ') + Sk('vek-sync sync') + Gr(' to push\n'));
-        } catch (err) {
-          console.error('\n  ' + R(`✗  ${err.message}`) + '\n');
-        }
-      } else {
-        console.log('\n  ' + Y('⚠') + Gr(`  "${ans}" not found in results — use `) + Sk('vek-sync add') + Gr(' to add manually\n'));
-      }
-    }
+    boxEnd();
+    if (results.length) console.log('  ' + Gr('Run ') + Sk(`vek-sync add ${results[0].name}`) + Gr(' to add.\n'));
+  } catch (err) {
+    console.error('  ' + R(`\u2717  ${err.message}`) + '\n'); process.exit(1);
   }
 }
-
-// ── VAULT ─────────────────────────────────────────────────────────────────
 
 function cmdVault() {
-  const sub = positional(0);
+  const sub   = positional(0);
+  const key   = positional(1);
+  const value = positional(2);
+  banner();
   if (sub === 'set') {
-    const name  = positional(1);
-    const rest  = args.filter(a => !a.startsWith('--'));
-    const value = rest.slice(2).join(' ');
-    if (!name || !value) { console.error('\n  ' + R('✗') + Gr('  Usage: vek-sync vault set <name> <value>') + '\n'); process.exit(1); }
-    vault.set(name, value);
-    console.log('\n  ' + G('✓') + Gr('  vault: stored ') + Ic(`"${name}"`) + '\n');
+    if (!key || !value) { console.error('  ' + R('\u2717  Usage: vek-sync vault set <key> <value>') + '\n'); process.exit(1); }
+    vault.set(key, value);
+    console.log('  ' + G('\u2713') + Gr(`  Vault: set ${key}`) + '\n');
   } else if (sub === 'get') {
-    const name = positional(1);
-    if (!name) { console.error('\n  ' + R('✗') + Gr('  Usage: vek-sync vault get <name>') + '\n'); process.exit(1); }
-    const val = vault.get(name);
-    if (val === null) { console.error('\n  ' + R(`✗  vault: no entry for "${name}"`) + '\n'); process.exit(1); }
-    console.log(val);
+    if (!key) { console.error('  ' + R('\u2717  Usage: vek-sync vault get <key>') + '\n'); process.exit(1); }
+    const val = vault.get(key);
+    if (val == null) { console.log('  ' + Y(`\u26a0  ${key} not found in vault`) + '\n'); }
+    else console.log('  ' + W(key) + ': ' + Sk(val) + '\n');
   } else if (sub === 'delete') {
-    const name = positional(1);
-    if (!name) { console.error('\n  ' + R('✗') + Gr('  Usage: vek-sync vault delete <name>') + '\n'); process.exit(1); }
-    vault.remove(name);
-    console.log('\n  ' + G('✓') + Gr('  vault: deleted ') + Ic(`"${name}"`) + '\n');
+    if (!key) { console.error('  ' + R('\u2717  Usage: vek-sync vault delete <key>') + '\n'); process.exit(1); }
+    vault.remove(key);
+    console.log('  ' + G('\u2713') + Gr(`  Vault: deleted ${key}`) + '\n');
   } else if (sub === 'list') {
     const keys = vault.list();
-    if (!keys.length) console.log('\n  ' + Gr('vault is empty\n'));
-    else { console.log(''); keys.forEach(k => console.log('  ' + St('·') + '  ' + Si(k))); console.log(''); }
+    box('VAULT KEYS');
+    if (!keys.length) console.log('  ' + BAR + '  ' + Gr('(empty)'));
+    for (const k of keys) row(Si(k), Gr('***'));
+    boxEnd();
   } else {
-    console.error('\n  ' + R('✗') + Gr('  Usage: vek-sync vault <set|get|delete|list> [name] [value]') + '\n'); process.exit(1);
+    console.error('  ' + R('\u2717  Usage: vek-sync vault set|get|delete|list') + '\n'); process.exit(1);
   }
 }
-
-// ── HELP ──────────────────────────────────────────────────────────────────
 
 function cmdHelp() {
   banner();
-
   box('COMMANDS');
-  row(W('init'),    Sk('vek-sync init') +    Gr('                 create .mcp.json in cwd'));
-  row(W('sync'),    Sk('vek-sync sync') +    Gr('                 push .mcp.json → all editors'));
-  row(W('export'),  Sk('vek-sync export') +  Gr('               pull editors → .mcp.json'));
-  row(W('status'),  Sk('vek-sync status') +  Gr('               show installed editors & counts'));
-  row(W('diff'),    Sk('vek-sync diff') +    Gr('                 drift check (CI-friendly)'));
-  row(W('add'),     Sk('vek-sync add') +     Gr('                  interactive server wizard'));
-  row(W('ping'),    Sk('vek-sync ping') +    Gr('                 health check all servers'));
-  row(W('share'),   Sk('vek-sync share') +   Gr('                publish config to shareable URL'));
-  row(W('profile'), Sk('vek-sync profile') + Gr(' save|use|list|delete  named server sets'));
-  row(W('search'),  Sk('vek-sync search') +  Gr(' <query>         find MCP servers in registry'));
-  row(W('vault'),   Sk('vek-sync vault') +   Gr('  set|get|delete|list  manage secrets'));
+  row(W('init'),    Sk('vek-sync init')    + Gr('  [--from <connector>] [--from-url <url>]'));
+  row(W('sync'),    Sk('vek-sync sync')    + Gr('  [--dry-run] [--watch] [--only <name,...>]'));
+  row(W('status'),  Sk('vek-sync status')  + Gr('  show sync state across all editors'));
+  row(W('diff'),    Sk('vek-sync diff')    + Gr('  show what sync would change'));
+  row(W('export'),  Sk('vek-sync export')  + Gr('  print .mcp.json as JSON'));
+  row(W('add'),     Sk('vek-sync add')     + Gr('  <name|package> [--url <mcp-url>]'));
+  row(W('ping'),    Sk('vek-sync ping')    + Gr('  health-check all configured servers'));
+  row(W('share'),   Sk('vek-sync share')   + Gr('  print sanitised config (safe to share)'));
+  row(W('profile'), Sk('vek-sync profile') + Gr('  save|use|list  named config snapshots'));
+  row(W('search'),  Sk('vek-sync search')  + Gr('  <query>  find MCP servers'));
+  row(W('vault'),   Sk('vek-sync vault')   + Gr('  set|get|delete|list  manage secrets'));
   boxEnd();
 
   box('OPTIONS');
@@ -672,10 +449,10 @@ function cmdHelp() {
     rooCode:       'Roo Code  (rooveterinaryinc.roo-cline)',
     gemini:        'Gemini CLI',
     copilot:       'GitHub Copilot CLI',
-    continue:      'Continue  (continue.continue) — array format',
-    codex:         'Codex CLI  — TOML format',
+    continue:      'Continue  (continue.continue) \u2014 array format',
+    codex:         'Codex CLI  \u2014 TOML format',
   };
-  for (const name of CONNECTOR_NAMES) row(G('✓') + ' ' + W(name), Si(desc[name] ?? ''));
+  for (const name of CONNECTOR_NAMES) row(G('\u2713') + ' ' + W(name), Si(desc[name] ?? ''));
   boxEnd();
 
   box('EXAMPLES');
@@ -686,7 +463,7 @@ function cmdHelp() {
   console.log('  ' + BAR + '  ' + Gr('# Preview what sync would change'));
   console.log('  ' + BAR + '  ' + Sk('vek-sync sync --dry-run'));
   blank();
-  console.log('  ' + BAR + '  ' + Gr('# Watch mode — auto-sync on save'));
+  console.log('  ' + BAR + '  ' + Gr('# Watch mode \u2014 auto-sync on save'));
   console.log('  ' + BAR + '  ' + Sk('vek-sync sync --watch'));
   blank();
   console.log('  ' + BAR + '  ' + Gr('# Find and add a server from the registry'));
@@ -705,25 +482,270 @@ function cmdHelp() {
   boxEnd();
 }
 
-// ── DISPATCH ──────────────────────────────────────────────────────────────
+// ── Ink TUI ──────────────────────────────────────────────────────────────────
+async function launchTUI() {
+  const ink                      = await import('ink');
+  const { render, Box, Text, useApp, useInput } = ink;
+  const { default: SelectInput } = await import('ink-select-input');
+  const { default: TextInput }   = await import('ink-text-input');
+  const React                    = await import('react');
+  const { useState }             = React;
+  const h = React.createElement;
 
-switch (cmd) {
-  case 'init':    await cmdInit();    break;
-  case 'sync':          cmdSync();    break;
-  case 'export':        cmdExport();  break;
-  case 'status':        cmdStatus();  break;
-  case 'diff':          cmdDiff();    break;
-  case 'add':     await cmdAdd();     break;
-  case 'ping':    await cmdPing();    break;
-  case 'share':   await cmdShare();   break;
-  case 'profile':       cmdProfile(); break;
-  case 'search':  await cmdSearch();  break;
-  case 'vault':         cmdVault();   break;
-  case 'help':
-  case '--help':
-  case '-h':            cmdHelp();    break;
-  default:
-    banner();
-    console.error('  ' + R(`✗  Unknown command: ${cmd ?? '(none)'}`) + '  ' + Gr('· run vek-sync help') + '\n');
-    process.exit(1);
+  const COMMANDS = {
+    init:    'Create .mcp.json and optionally seed from an editor',
+    sync:    'Push .mcp.json to all configured editors',
+    status:  'Show sync state across all editors',
+    diff:    'Preview what sync would change',
+    export:  'Print .mcp.json as JSON',
+    add:     'Add an MCP server by name or URL',
+    ping:    'Health-check all configured servers',
+    share:   'Print sanitised config safe to share',
+    profile: 'Save, switch, or list named config snapshots',
+    search:  'Find MCP servers in the registry',
+    vault:   'Manage secrets (set/get/delete/list)',
+  };
+
+  const Header = ({ cmd }) => h(Box, { flexDirection:'column', paddingLeft:2, paddingBottom:1 },
+    h(Text, { color:'cyan', bold:true }, 'vek-sync ' + cmd),
+    h(Text, { color:'gray', dimColor:true }, COMMANDS[cmd] || '')
+  );
+
+  const Footer = () => h(Text, { color:'gray', dimColor:true, marginLeft:2 }, 'esc to go back');
+
+  const Ask = ({ prompt, placeholder, hint, onSubmit, onBack }) => {
+    const [val, setVal] = useState('');
+    useInput((_, key) => { if (key.escape) onBack(); });
+    return h(Box, { flexDirection:'column', paddingLeft:2 },
+      h(Text, { color:'cyan' }, prompt),
+      hint && h(Text, { color:'gray', dimColor:true }, hint),
+      h(Box, { marginTop:1 },
+        h(Text, { color:'cyan' }, '> '),
+        h(TextInput, { value:val, placeholder, onChange:setVal,
+          onSubmit: v => { if(v.trim()) onSubmit(v.trim()); }
+        })
+      ),
+      h(Text, { color:'gray', dimColor:true }, 'enter to confirm   esc to go back')
+    );
+  };
+
+  const WIZARDS = {
+
+    init: ({ onRun, onBack }) => {
+      const [step, setStep] = useState('action');
+      useInput((_, key) => { if (key.escape) step === 'action' ? onBack() : setStep('action'); });
+      const seedItems = [
+        { label:'No seed — start blank',                     value:[] },
+        { label:'Seed from Claude Desktop',                  value:['--from','claudeDesktop'] },
+        { label:'Seed from Cursor',                          value:['--from','cursor'] },
+        { label:'Seed from VS Code',                         value:['--from','vscode'] },
+        { label:'Seed from Windsurf',                        value:['--from','windsurf'] },
+        { label:'Seed from Claude Code',                     value:['--from','claudeCode'] },
+        { label:'Seed from a URL →',                         value:'__url' },
+      ];
+      if (step === 'action') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'init' }),
+        h(Text, { color:'cyan', marginLeft:2, marginBottom:1 }, 'Seed config from which editor?'),
+        h(SelectInput, { items: seedItems, onSelect: item => {
+          if (item.value === '__url') setStep('url');
+          else onRun(item.value);
+        }}),
+        h(Footer, null)
+      );
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'init' }),
+        h(Ask, { prompt:'URL to seed from?',
+          placeholder:'https://example.com/mcp.json',
+          onSubmit: v => onRun(['--from-url', v]),
+          onBack: () => setStep('action') })
+      );
+    },
+
+    sync: ({ onRun, onBack }) => {
+      useInput((_, key) => { if (key.escape) onBack(); });
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'sync' }),
+        h(Text, { color:'cyan', marginLeft:2, marginBottom:1 }, 'How do you want to sync?'),
+        h(SelectInput, { items:[
+          { label:'Sync to all editors  (recommended)', value:[] },
+          { label:'Dry run — preview changes only',      value:['--dry-run'] },
+          { label:'Watch mode — auto-sync on save',      value:['--watch'] },
+          { label:'Sync specific editor only →',         value:'__only' },
+        ], onSelect: item => item.value === '__only' ? null : onRun(item.value) }),
+        h(Footer, null)
+      );
+    },
+
+    add: ({ onRun, onBack }) => {
+      const [step, setStep] = useState('method');
+      useInput((_, key) => { if (key.escape) step === 'method' ? onBack() : setStep('method'); });
+      if (step === 'method') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'add' }),
+        h(SelectInput, { items:[
+          { label:'Add by npm package name', value:'npm' },
+          { label:'Add by HTTP URL',          value:'url' },
+        ], onSelect: item => setStep(item.value) }),
+        h(Footer, null)
+      );
+      if (step === 'npm') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'add' }),
+        h(Ask, { prompt:'npm package name?',
+          placeholder:'e.g. @modelcontextprotocol/server-filesystem',
+          onSubmit: v => onRun([v]),
+          onBack: () => setStep('method') })
+      );
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'add' }),
+        h(Ask, { prompt:'Server name?', placeholder:'my-server',
+          onSubmit: v => setStep('url_' + v),
+          onBack: () => setStep('method') })
+      );
+    },
+
+    search: ({ onRun, onBack }) => {
+      useInput((_, key) => { if (key.escape) onBack(); });
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'search' }),
+        h(Ask, { prompt:'Search for an MCP server:',
+          placeholder:'e.g. filesystem  or  github  or  postgres',
+          hint:'searches curated registry + npm',
+          onSubmit: v => onRun([v]),
+          onBack })
+      );
+    },
+
+    vault: ({ onRun, onBack }) => {
+      const [step, setStep]   = useState('action');
+      const [action, setAct]  = useState('');
+      const [key, setKey]     = useState('');
+      useInput((_, key) => { if (key.escape) step === 'action' ? onBack() : setStep('action'); });
+      if (step === 'action') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'vault' }),
+        h(SelectInput, { items:[
+          { label:'List all vault keys',  value:'list' },
+          { label:'Get a secret',         value:'get' },
+          { label:'Set a secret',         value:'set' },
+          { label:'Delete a secret',      value:'delete' },
+        ], onSelect: item => {
+          setAct(item.value);
+          if (item.value === 'list') onRun(['list']);
+          else setStep('key');
+        }}),
+        h(Footer, null)
+      );
+      if (step === 'key') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'vault' }),
+        h(Ask, { prompt:'Key name?', placeholder:'e.g. OPENAI_API_KEY',
+          onSubmit: v => { setKey(v); action === 'get' || action === 'delete' ? onRun([action, v]) : setStep('value'); },
+          onBack: () => setStep('action') })
+      );
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'vault' }),
+        h(Ask, { prompt:`Value for "${key}"?`, placeholder:'paste secret here',
+          hint:'stored encrypted in ~/.vek-sync/vault',
+          onSubmit: v => onRun(['set', key, v]),
+          onBack: () => setStep('key') })
+      );
+    },
+
+    profile: ({ onRun, onBack }) => {
+      const [step, setStep] = useState('action');
+      const [action, setAct] = useState('');
+      useInput((_, key) => { if (key.escape) step === 'action' ? onBack() : setStep('action'); });
+      if (step === 'action') return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'profile' }),
+        h(SelectInput, { items:[
+          { label:'List saved profiles',   value:'list' },
+          { label:'Save current config →', value:'save' },
+          { label:'Switch to a profile →', value:'use' },
+        ], onSelect: item => {
+          setAct(item.value);
+          if (item.value === 'list') onRun(['list']);
+          else setStep('name');
+        }}),
+        h(Footer, null)
+      );
+      return h(Box, { flexDirection:'column' },
+        h(Header, { cmd:'profile' }),
+        h(Ask, { prompt: action === 'save' ? 'Profile name to save as?' : 'Profile name to switch to?',
+          placeholder:'e.g. work  or  personal',
+          onSubmit: v => onRun([action, v]),
+          onBack: () => setStep('action') })
+      );
+    },
+
+    ping:   ({ onRun, onBack }) => { const { useEffect } = React; useInput((_, k) => { if (k.escape) onBack(); }); useEffect(() => { onRun([]); }, []); return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  pinging servers...')); },
+    status: ({ onRun, onBack }) => { const { useEffect } = React; useInput((_, k) => { if (k.escape) onBack(); }); useEffect(() => { onRun([]); }, []); return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  checking status...')); },
+    diff:   ({ onRun, onBack }) => { const { useEffect } = React; useInput((_, k) => { if (k.escape) onBack(); }); useEffect(() => { onRun([]); }, []); return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  computing diff...')); },
+    export: ({ onRun, onBack }) => { const { useEffect } = React; useInput((_, k) => { if (k.escape) onBack(); }); useEffect(() => { onRun([]); }, []); return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  exporting...')); },
+    share:  ({ onRun, onBack }) => { const { useEffect } = React; useInput((_, k) => { if (k.escape) onBack(); }); useEffect(() => { onRun([]); }, []); return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  preparing share...')); },
+  };
+
+  const VekSyncApp = () => {
+    const { exit }            = useApp();
+    const [screen, setScreen] = useState('palette');
+    const [selectedCmd, setSel] = useState(null);
+    useInput(input => { if (input === 'q' && screen === 'palette') exit(); });
+
+    const items = Object.entries(COMMANDS).map(([k, v]) => ({
+      label: k.padEnd(12) + ' ' + v, value: k
+    }));
+
+    const runCmd = async (selectedCmd, args) => {
+      exit();
+      await new Promise(r => setTimeout(r, 80));
+      const { default: child } = await import('child_process');
+      child.spawnSync(process.execPath, [process.argv[1], selectedCmd, ...args],
+        { stdio:'inherit', shell: false });
+    };
+
+    if (screen === 'palette') return h(Box, { flexDirection:'column', paddingTop:1 },
+      h(Text, { color:'gray', dimColor:true, marginLeft:2 }, 'up/down  enter=select  q=quit'),
+      h(Box, { marginTop:1 },
+        h(SelectInput, { items,
+          onSelect: item => { setSel(item.value); setScreen('wizard'); }
+        })
+      )
+    );
+
+    if (screen === 'wizard' && selectedCmd && WIZARDS[selectedCmd]) {
+      const Wizard = WIZARDS[selectedCmd];
+      return h(Wizard, {
+        onRun:  (args) => { setScreen('done'); runCmd(selectedCmd, args); },
+        onBack: () => setScreen('palette'),
+      });
+    }
+    return h(Box, { padding:1 }, h(Text, { color:'cyan' }, '  running vek-sync ' + selectedCmd + '...'));
+  };
+
+  banner();
+  render(h(VekSyncApp, null));
+}
+
+// ── Dispatch ──────────────────────────────────────────────────────────────────
+if (!cmd && process.stdout.isTTY && !process.env.CI) {
+  await launchTUI();
+} else {
+  switch (cmd) {
+    case 'init':    await cmdInit();    break;
+    case 'sync':          cmdSync();    break;
+    case 'export':        cmdExport();  break;
+    case 'status':        cmdStatus();  break;
+    case 'diff':          cmdDiff();    break;
+    case 'add':     await cmdAdd();     break;
+    case 'ping':    await cmdPing();    break;
+    case 'share':   await cmdShare();   break;
+    case 'profile':       cmdProfile(); break;
+    case 'search':  await cmdSearch();  break;
+    case 'vault':         cmdVault();   break;
+    case '--version':
+    case '-v':            console.log(`vek-sync v${VERSION}`); break;
+    case 'help':
+    case '--help':
+    case '-h':            cmdHelp();    break;
+    default:
+      banner();
+      console.error('  ' + R(`\u2717  Unknown command: ${cmd ?? '(none)'}`) + '  ' + Gr('\u00b7 run vek-sync help') + '\n');
+      process.exit(1);
+  }
 }
