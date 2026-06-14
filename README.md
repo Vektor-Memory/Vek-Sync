@@ -1,12 +1,13 @@
-# vek-sync - v0.3.0
+# vek-sync - v0.3.1
 
 > One config file. Every editor. Always in sync.
 
 https://medium.com/ai-in-plain-english/mcp-sync-one-config-file-to-rule-them-all-8fa0837fc4c8
 
-<img width="1089" height="442" alt="Screenshot 2026-05-06 091216" src="https://github.com/user-attachments/assets/fd118a2a-c077-45e0-801c-7b46b2496572" />
-<img width="1070" height="460" alt="Screenshot 2026-05-06 091233" src="https://github.com/user-attachments/assets/13192cdd-f922-45e8-8a5d-00cbd2300978" />
-<img width="1034" height="486" alt="Screenshot 2026-05-06 091247" src="https://github.com/user-attachments/assets/386b513d-c75f-49ae-99a3-bf1a0d0adde5" />
+<img width="973" height="463" alt="image" src="https://github.com/user-attachments/assets/73b30ac6-bc92-4918-8a62-4fb66c9bdf20" />
+<img width="994" height="506" alt="image" src="https://github.com/user-attachments/assets/e0ee4c82-d995-4f16-8e84-0a7f0e1f9394" />
+
+
 
 vek-sync is a zero-dependency CLI that keeps your MCP (Model Context Protocol) server configurations in sync across every AI editor — Claude Desktop, Cursor, VS Code, Windsurf, Claude Code, Cline, Roo Code, Gemini CLI, GitHub Copilot, Continue, and Codex. No account. No cloud. Just a single `.mcp.json` file and one command.
 
