@@ -5,7 +5,6 @@
 https://medium.com/ai-in-plain-english/mcp-sync-one-config-file-to-rule-them-all-8fa0837fc4c8
 
 <img width="973" height="463" alt="image" src="https://github.com/user-attachments/assets/73b30ac6-bc92-4918-8a62-4fb66c9bdf20" />
-<img width="994" height="506" alt="image" src="https://github.com/user-attachments/assets/e0ee4c82-d995-4f16-8e84-0a7f0e1f9394" />
 
 
 
